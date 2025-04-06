@@ -73,6 +73,7 @@ log-likelihood. For models with clustered data, cluster-robust standard errors
 are calculated using the sandwich package.
 }
 \examples{
+
 # Generate example data
 set.seed(123)
 n <- 200
@@ -105,6 +106,7 @@ print(result2$thresholds)
 
 # Access cluster-robust standard errors
 print(result2$se_cluster)
+
 
 }
 \seealso{

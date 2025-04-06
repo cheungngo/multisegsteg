@@ -78,6 +78,7 @@ log-likelihood. For models with clustered data, cluster-robust standard errors
 are calculated using the sandwich package.
 }
 \examples{
+
 # Generate example data with both steps and slope changes
 set.seed(123)
 n <- 200
@@ -112,6 +113,7 @@ result_clustered <- multi_stegmented(
 
 # Access cluster-robust standard errors
 print(result_clustered$se_cluster)
+
 
 }
 \seealso{

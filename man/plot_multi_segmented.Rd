@@ -60,6 +60,7 @@ and their log-likelihood value.
 }
 }
 \examples{
+
 # Generate example data
 set.seed(123)
 n <- 200
@@ -76,6 +77,9 @@ result <- multi_segmented(
   data = data,
   n_thresholds = 2
 )
+
+library(ggplot2)
+library(gridExtra)
 
 # Plot both the fitted line and log-likelihood surface
 plot_multi_segmented(result, data, formula.1 = y ~ z, formula.2 = ~ x)

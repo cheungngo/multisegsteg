@@ -21,7 +21,7 @@ The package provides tools for:
 }
 }
 \author{
-\strong{Maintainer}: Cheung Ngo \email{cheungngo@gmail.com}
+\strong{Maintainer}: Ngo Cheung \email{cheungngo@gmail.com}
 
 Authors:
 \itemize{

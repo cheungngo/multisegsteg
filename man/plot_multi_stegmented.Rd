@@ -65,6 +65,7 @@ The stegmented model differs from the standard segmented model by allowing
 discontinuities at the threshold points in addition to changes in slope.
 }
 \examples{
+
 # Generate example data with both steps and slope changes
 set.seed(123)
 n <- 200
@@ -83,6 +84,9 @@ result <- multi_stegmented(
   data = data,
   n_thresholds = 2
 )
+
+library(ggplot2)
+library(gridExtra)
 
 # Plot both the fitted line and log-likelihood surface
 plot_multi_stegmented(result, data, formula.1 = y ~ z, formula.2 = ~ x)

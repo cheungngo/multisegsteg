@@ -43,6 +43,7 @@
 #'   \item{se_cluster}{Cluster-robust standard errors (if cluster_var provided)}
 #'
 #' @examples
+#'
 #' # Generate example data
 #' set.seed(123)
 #' n <- 200
@@ -76,8 +77,10 @@
 #' # Access cluster-robust standard errors
 #' print(result2$se_cluster)
 #'
+#'
 #' @seealso \code{\link{plot_multi_segmented}} for visualizing the results
 #' @seealso \code{\link{multi_stegmented}} for fitting models with both discontinuities and slope changes
+#'
 #'
 #' @importFrom sandwich vcovCL
 #'
@@ -210,6 +213,7 @@ multi_segmented <- function(formula.1, formula.2, family, data, n_thresholds = 1
 #'         If plot.type = "fit" or "loglik", returns a single ggplot object.
 #'
 #' @examples
+#'
 #' # Generate example data
 #' set.seed(123)
 #' n <- 200
@@ -226,6 +230,9 @@ multi_segmented <- function(formula.1, formula.2, family, data, n_thresholds = 1
 #'   data = data,
 #'   n_thresholds = 2
 #' )
+#'
+#' library(ggplot2)
+#' library(gridExtra)
 #'
 #' # Plot both the fitted line and log-likelihood surface
 #' plot_multi_segmented(result, data, formula.1 = y ~ z, formula.2 = ~ x)
@@ -250,6 +257,7 @@ multi_segmented <- function(formula.1, formula.2, family, data, n_thresholds = 1
 #'
 #' @seealso \code{\link{multi_segmented}} for fitting the segmented regression model
 #' @seealso \code{\link{plot_multi_stegmented}} for plotting step-segmented regression models
+#'
 #'
 #' @importFrom ggplot2 ggplot aes geom_point geom_line geom_vline geom_tile geom_text
 #'             scale_fill_gradient labs theme_minimal annotate theme_void
