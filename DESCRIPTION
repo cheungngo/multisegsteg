@@ -3,7 +3,7 @@ Type: Package
 Title: Regression Models with Multiple Break-Points Estimation - Segmented & Stegmented
 Version: 0.1.0
 Authors@R: c(
-    person("Cheung", "Ngo", email = "cheungngo@gmail.com", role = c("aut", "cre")),
+    person("Ngo", "Cheung", email = "cheungngo@gmail.com", role = c("aut", "cre")),
     person("Kenneth C.Y.", "Wong", email = "mail@cywong.hk", role = "aut"),
     person("Hon Cheong", "So", email = "hcso@cuhk.edu.hk", role = "aut")
   )
