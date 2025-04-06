@@ -5,3 +5,7 @@ docs
 .httr-oauth
 .DS_Store
 .quarto
+.RData
+.Ruserdata
+*.tar.gz
+*.Rproj
