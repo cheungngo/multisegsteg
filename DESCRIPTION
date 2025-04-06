@@ -1,0 +1,32 @@
+Package: multisegsteg
+Type: Package
+Title: Regression Models with Multiple Break-Points Estimation - Segmented & Stegmented
+Version: 0.1.0
+Authors@R: c(
+    person("Cheung", "Ngo", email = "cheungngo@gmail.com", role = c("aut", "cre")),
+    person("Kenneth C.Y.", "Wong", email = "mail@cywong.hk", role = "aut"),
+    person("Hon Cheong", "So", email = "hcso@cuhk.edu.hk", role = "aut")
+  )
+Description: Implements methods for fitting and visualizing segmented regression models 
+    with multiple thresholds. The package provides two primary types of change-point 
+    regression models: (1) Multi-segmented regression with continuous piecewise linear 
+    relationships that change slope at one or more thresholds while maintaining continuity,
+    and (2) Multi-stegmented regression that allows both discontinuities (steps) and 
+    slope changes at the threshold points. The package enables identification of optimal 
+    threshold locations through grid search based on likelihood maximization, supports 
+    both continuous (Gaussian) and binary (logistic) outcomes, provides cluster-robust 
+    standard errors for correlated data, and includes comprehensive visualization tools 
+    for model interpretation.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    ggplot2 (>= 3.3.0),
+    gridExtra (>= 2.3),
+    sandwich (>= 3.0.0)
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2

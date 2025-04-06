@@ -1,0 +1,5 @@
+#' @importFrom ggplot2 ggplot aes geom_point
+#' @importFrom gridExtra grid.arrange
+#' @importFrom sandwich vcovCL
+
+exportPattern("^[[:alpha:]]+")
