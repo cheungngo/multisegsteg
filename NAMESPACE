@@ -1,5 +1,7 @@
-#' @importFrom ggplot2 ggplot aes geom_point
+#' @importFrom ggplot2 ggplot aes geom_point geom_line geom_vline geom_tile annotate scale_fill_gradient labs theme_minimal theme_void
 #' @importFrom gridExtra grid.arrange
 #' @importFrom sandwich vcovCL
+#' @importFrom stats model.frame model.matrix logLik pmax predict quantile
+#' @importFrom MASS mvrnorm
 
 exportPattern("^[[:alpha:]]+")

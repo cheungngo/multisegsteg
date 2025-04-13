@@ -23,4 +23,5 @@
 #' @importFrom gridExtra grid.arrange
 #' @importFrom sandwich vcovCL
 #' @importFrom stats model.frame model.matrix logLik pmax predict quantile
+#' @importFrom MASS mvrnorm
 NULL
