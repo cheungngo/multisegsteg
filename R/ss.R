@@ -96,6 +96,189 @@ multi_ss <- function(formula.1, formula.2, family, data, n_thresholds = 1,
   return(results)
 }
 
+#' Fit a Segmented or Stegmented Model for a Single Number of Thresholds
+#'
+#' This internal helper function fits a segmented or stegmented model for a specified number of thresholds,
+#' selecting the best threshold combination via grid search over quantiles of the change point variable.
+#' It supports Gaussian and binomial families and optionally computes cluster-robust standard errors.
+#'
+#' @param n_thresholds An integer specifying the number of thresholds to fit.
+#' @param formula.1 A formula specifying the outcome and base covariates (e.g., \code{y ~ x1 + x2}).
+#' @param formula.2 A formula specifying the change point variable (e.g., \code{~ z}).
+#' @param family A character string specifying the family of the model. Must be either \code{"gaussian"} or \code{"binomial"}.
+#' @param data A data frame containing the variables specified in the formulas.
+#' @param lb.quantile A numeric value between 0 and 1 specifying the lower bound quantile for threshold candidates.
+#' @param ub.quantile A numeric value between 0 and 1 specifying the upper bound quantile for threshold candidates.
+#' @param grid.search.max An integer specifying the maximum number of threshold candidates to consider.
+#'   Set to 20 when \code{n_thresholds = 1}.
+#' @param cluster_var Optional. A character string specifying the name of the clustering variable for computing cluster-robust standard errors.
+#' @param verbose Logical. If \code{TRUE}, prints detailed output for each threshold combination.
+#' @param model_type A character string specifying the type of model to fit. Must be either \code{"segmented"} or \code{"stegmented"}.
+#'   - \code{"segmented"}: Includes only segmented terms \code{(x - e_i)+}.
+#'   - \code{"stegmented"}: Includes both step terms \code{I(x > e_i)} and segmented terms \code{(x - e_i)+}.
+#' @param ... Additional arguments passed to the fitting functions (\code{lm} or \code{glm}).
+#'
+#' @return A list containing the following components:
+#'   \itemize{
+#'     \item \code{n_thresholds_requested}: The number of thresholds requested.
+#'     \item \code{n_thresholds_used}: The number of thresholds actually used (may be less than requested if data constraints apply).
+#'     \item \code{thresholds}: The best thresholds selected based on log-likelihood.
+#'     \item \code{fit}: The fitted model object (\code{lm} or \code{glm}).
+#'     \item \code{loglik}: The log-likelihood of the best model.
+#'     \item \code{all_logliks}: A vector of log-likelihoods for all threshold combinations evaluated.
+#'     \item \code{all_combinations}: A matrix of all threshold combinations evaluated.
+#'     \item \code{vcov_cluster}: The cluster-robust variance-covariance matrix, if \code{cluster_var} is specified.
+#'     \item \code{se_cluster}: The cluster-robust standard errors, if \code{cluster_var} is specified.
+#'   }
+#'
+#' @details
+#' This function is called by \code{\link{multi_ss}} to fit models for a single number of thresholds.
+#' It performs a grid search over combinations of thresholds within the specified quantile range of the change point variable,
+#' selecting the combination that maximizes the log-likelihood. If the requested number of thresholds exceeds the number of
+#' unique thresholds available, it reduces the number used and issues a warning.
+#'
+#' @note
+#' The \code{sandwich} package is required for computing cluster-robust standard errors and must be installed.
+#' This function is intended for internal use by \code{\link{multi_ss}}.
+#'
+#' @keywords internal
+#' @import sandwich
+#' @export
+fit_for_n_thresholds <- function(n_thresholds, formula.1, formula.2, family, data, lb.quantile, ub.quantile, grid.search.max, cluster_var, verbose, model_type, ...) {
+  requireNamespace("sandwich", quietly = TRUE)
+
+  # Validate model_type
+  if (!model_type %in% c("segmented", "stegmented")) {
+    stop("model_type must be 'segmented' or 'stegmented'")
+  }
+
+  # Extract outcome variable
+  y <- model.frame(formula.1, data)[, 1]
+
+  # Extract change point variable
+  chngpt_var_name <- all.vars(formula.2)[1]
+  chngpt_var <- data[[chngpt_var_name]]
+
+  # Adjust grid.search.max for single threshold
+  if (n_thresholds == 1) {
+    grid.search.max <- 20
+  }
+
+  # Generate candidate thresholds based on quantiles
+  chngpts <- unique(quantile(chngpt_var,
+                             seq(lb.quantile, ub.quantile,
+                                 length.out = min(grid.search.max, length(unique(chngpt_var))))))
+
+  # Adjust n_thresholds if insufficient unique thresholds
+  effective_n_thresholds <- n_thresholds
+  if (length(chngpts) < n_thresholds) {
+    while (length(chngpts) < effective_n_thresholds && effective_n_thresholds > 1) {
+      effective_n_thresholds <- effective_n_thresholds - 1
+    }
+    if (effective_n_thresholds < n_thresholds) {
+      cat("Warning: Reduced n_thresholds from", n_thresholds, "to", effective_n_thresholds,
+          "due to insufficient unique thresholds.\n")
+    }
+    # Regenerate thresholds with finer grid if reduced to 1
+    if (effective_n_thresholds == 1 && n_thresholds > 1) {
+      grid.search.max <- 20
+      chngpts <- unique(quantile(chngpt_var,
+                                 seq(lb.quantile, ub.quantile,
+                                     length.out = min(grid.search.max, length(unique(chngpt_var))))))
+    }
+  }
+
+  # Check for available thresholds
+  if (length(chngpts) == 0) {
+    stop("No unique thresholds available.")
+  }
+
+  # Generate all combinations of thresholds
+  comb <- t(combn(chngpts, effective_n_thresholds))
+  n_comb <- nrow(comb)
+
+  # Initialize log-likelihood storage
+  logliks <- numeric(n_comb)
+
+  # Base design matrix without threshold terms
+  Z <- model.matrix(formula.1, data)
+
+  # Evaluate each combination
+  for (i in 1:n_comb) {
+    thresholds <- comb[i, ]
+
+    # Construct design matrix based on model_type
+    if (model_type == "segmented") {
+      X_threshold <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+      X <- cbind(Z, X_threshold)
+    } else { # model_type == "stegmented"
+      X_step <- sapply(thresholds, function(e) as.numeric(chngpt_var > e))
+      X_seg <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+      X <- cbind(Z, X_step, X_seg)
+    }
+
+    # Fit model based on family
+    if (family == "gaussian") {
+      fit <- lm(y ~ X - 1)
+      logliks[i] <- logLik(fit)
+    } else if (family == "binomial") {
+      fit <- glm(y ~ X - 1, family = binomial)
+      logliks[i] <- logLik(fit)
+    } else {
+      stop("Only 'gaussian' and 'binomial' families are supported")
+    }
+
+    # Verbose output if requested
+    if (verbose) {
+      cat(sprintf("Combination %d, thresholds: %s, log-likelihood: %.4f\n",
+                  i, paste(thresholds, collapse = ", "), logliks[i]))
+    }
+  }
+
+  # Identify best combination
+  best_idx <- which.max(logliks)
+  best_thresholds <- comb[best_idx, ]
+
+  # Fit final model with best thresholds
+  if (model_type == "segmented") {
+    X_threshold <- sapply(best_thresholds, function(e) pmax(chngpt_var - e, 0))
+    X <- cbind(Z, X_threshold)
+  } else { # model_type == "stegmented"
+    X_step <- sapply(best_thresholds, function(e) as.numeric(chngpt_var > e))
+    X_seg <- sapply(best_thresholds, function(e) pmax(chngpt_var - e, 0))
+    X <- cbind(Z, X_step, X_seg)
+  }
+
+  if (family == "gaussian") {
+    best_fit <- lm(y ~ X - 1)
+  } else {
+    best_fit <- glm(y ~ X - 1, family = binomial)
+  }
+
+  # Compute cluster-robust standard errors if specified
+  if (!is.null(cluster_var)) {
+    cluster <- data[[cluster_var]]
+    vcov_cluster <- sandwich::vcovCL(best_fit, cluster = cluster)
+    se_cluster <- sqrt(diag(vcov_cluster))
+  } else {
+    vcov_cluster <- NULL
+    se_cluster <- NULL
+  }
+
+  # Return results with requested and used n_thresholds
+  return(list(
+    n_thresholds_requested = n_thresholds,
+    n_thresholds_used = length(best_thresholds),
+    thresholds = best_thresholds,
+    fit = best_fit,
+    loglik = logliks[best_idx],
+    all_logliks = logliks,
+    all_combinations = comb,
+    vcov_cluster = vcov_cluster,
+    se_cluster = se_cluster
+  ))
+}
+
 #' Plot Segmented or Stegmented Model Results
 #'
 #' @description
