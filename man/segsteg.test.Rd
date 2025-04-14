@@ -27,7 +27,9 @@ segsteg.test(
 )
 }
 \arguments{
-\item{formula.null}{Formula for the null model (without change points).}
+\item{formula.null}{Formula for the null model (without change points). When \code{n_thresholds = 1} and
+\code{cluster_var} is specified (e.g., \code{cluster_var = "cluster"}), consider excluding \code{factor(ID)} from
+the formula to avoid collinearity if \code{cluster} corresponds to \code{ID}. See Details for guidance.}
 
 \item{formula.chngpt}{Formula specifying the change point variable.}
 
@@ -63,7 +65,8 @@ segsteg.test(
 
 \item{n_thresholds}{Number of thresholds to test.}
 
-\item{cluster_var}{Optional cluster variable for robust SEs.}
+\item{cluster_var}{Optional cluster variable for robust standard errors (e.g., \code{"cluster"}). If used,
+review the null model to avoid redundancy with \code{factor(ID)}.}
 }
 \value{
 For \code{n_thresholds = 1}, a list of class "chngpt.test" containing:
@@ -75,6 +78,7 @@ For \code{n_thresholds = 1}, a list of class "chngpt.test" containing:
 \item \code{fit.null}: Null model fit (if \code{keep.fits = TRUE}).
 \item \code{fit.alt}: Alternative model fit (if \code{keep.fits = TRUE}).
 }
+
 For \code{n_thresholds > 1}, a list of class "multi.segsteg.test" containing:
 \itemize{
 \item \code{thresholds}: Estimated thresholds.
@@ -91,15 +95,35 @@ of adding each additional threshold. P-values are calculated using the chi-squar
 based on the LRT statistic.
 }
 \details{
-For single thresholds (\code{n_thresholds = 1}), the function tests for a change point using
-likelihood ratio or score tests, with p-values computed via Monte Carlo or bootstrap methods.
-For multiple thresholds (\code{n_thresholds > 1}), it supports "hinge" and "stegmented" types,
-using a sequential LRT approach:
+For single thresholds (\code{n_thresholds = 1}), the function tests for a change point using likelihood
+ratio or score tests, with p-values computed via Monte Carlo or parametric bootstrap methods. For
+multiple thresholds (\code{n_thresholds > 1}), it supports "hinge" and "stegmented" types, using a
+sequential LRT approach:
 \enumerate{
 \item Fits a null model (0 thresholds).
 \item Fits models with 1 to \code{n_thresholds} thresholds, selecting the best combination.
-\item Computes LRT statistic: \code{2 * (loglik_k - loglik_{k-1})}.
+\item Computes LRT statistic: \verb{2 * (loglik_k - loglik_\{k-1\})}.
 \item Uses chi-squared distribution for p-values (df = 1 for "hinge", 2 for "stegmented").
+}
+\subsection{Consideration for \code{n_thresholds = 1}}{
+
+When \code{n_thresholds = 1} and you specify \code{cluster_var = "cluster"} for cluster-robust standard errors,
+including \code{factor(ID)} as fixed effects in \code{formula.null} might be redundant if \code{cluster} corresponds
+to \code{ID}. This can lead to collinearity, causing a singular matrix error. To address this, try simplifying
+the null model by removing \code{factor(ID)}:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{formula.null = as.formula('cholestrol ~ age + Gender + education + dose.METFORMIN + dose.ATORVASTATIN + dose.SIMVASTATIN')
+}\if{html}{\out{</div>}}
+\itemize{
+\item \strong{Pros}: Reduces the number of parameters, likely eliminating singularity and improving model stability.
+\item \strong{Cons}: Loses individual-specific intercepts, but clustering via \code{cluster_var} adjusts standard errors
+for intra-ID correlation, mitigating this loss.
+\item \strong{Test}: Rerun \code{segsteg.test} with the simplified formula. If it runs successfully, the issue was likely
+due to \code{factor(ID)}.
+}
+
+This adjustment leverages \code{cluster_var} to handle ID-level effects implicitly, avoiding redundancy and
+ensuring the model is well-specified.
 }
 }
 \examples{

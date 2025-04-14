@@ -20,10 +20,12 @@ Description: Implements methods for fitting and visualizing segmented regression
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
-Imports: 
-    ggplot2 (>= 3.3.0),
-    gridExtra (>= 2.3),
-    sandwich (>= 3.0.0)
+Imports:
+    ggplot2,
+    gridExtra,
+    sandwich,
+    stats,
+    MASS
 Suggests: 
     knitr,
     rmarkdown,

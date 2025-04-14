@@ -6,7 +6,9 @@
 #' of adding each additional threshold. P-values are calculated using the chi-squared distribution
 #' based on the LRT statistic.
 #'
-#' @param formula.null Formula for the null model (without change points).
+#' @param formula.null Formula for the null model (without change points). When `n_thresholds = 1` and
+#'   `cluster_var` is specified (e.g., `cluster_var = "cluster"`), consider excluding `factor(ID)` from
+#'   the formula to avoid collinearity if `cluster` corresponds to `ID`. See Details for guidance.
 #' @param formula.chngpt Formula specifying the change point variable.
 #' @param family Family of the response variable ("binomial" or "gaussian").
 #' @param data Data frame containing the variables.
@@ -24,38 +26,53 @@
 #' @param keep.fits Keep model fits in the output.
 #' @param verbose Print verbose output.
 #' @param n_thresholds Number of thresholds to test.
-#' @param cluster_var Optional cluster variable for robust SEs.
+#' @param cluster_var Optional cluster variable for robust standard errors (e.g., `"cluster"`). If used,
+#'   review the null model to avoid redundancy with `factor(ID)`.
 #'
 #' @return
-#' For \code{n_thresholds = 1}, a list of class "chngpt.test" containing:
-#' \itemize{
-#'   \item \code{chngpt}: Estimated change point.
-#'   \item \code{statistic}: Test statistic.
-#'   \item \code{p.value}: P-value.
-#'   \item \code{loglik}: Log-likelihood of the alternative model.
-#'   \item \code{fit.null}: Null model fit (if \code{keep.fits = TRUE}).
-#'   \item \code{fit.alt}: Alternative model fit (if \code{keep.fits = TRUE}).
-#' }
-#' For \code{n_thresholds > 1}, a list of class "multi.segsteg.test" containing:
-#' \itemize{
-#'   \item \code{thresholds}: Estimated thresholds.
-#'   \item \code{fit}: Final model fit with \code{n_thresholds} thresholds.
-#'   \item \code{loglik}: Log-likelihood of the final model.
-#'   \item \code{all_logliks}: Log-likelihoods for models with 0 to \code{n_thresholds} thresholds.
-#'   \item \code{p_values}: Sequential LRT p-values for each additional threshold.
-#' }
+#' For `n_thresholds = 1`, a list of class "chngpt.test" containing:
+#' - `chngpt`: Estimated change point.
+#' - `statistic`: Test statistic.
+#' - `p.value`: P-value.
+#' - `loglik`: Log-likelihood of the alternative model.
+#' - `fit.null`: Null model fit (if `keep.fits = TRUE`).
+#' - `fit.alt`: Alternative model fit (if `keep.fits = TRUE`).
+#'
+#' For `n_thresholds > 1`, a list of class "multi.segsteg.test" containing:
+#' - `thresholds`: Estimated thresholds.
+#' - `fit`: Final model fit with `n_thresholds` thresholds.
+#' - `loglik`: Log-likelihood of the final model.
+#' - `all_logliks`: Log-likelihoods for models with 0 to `n_thresholds` thresholds.
+#' - `p_values`: Sequential LRT p-values for each additional threshold.
 #'
 #' @details
-#' For single thresholds (\code{n_thresholds = 1}), the function tests for a change point using
-#' likelihood ratio or score tests, with p-values computed via Monte Carlo or bootstrap methods.
-#' For multiple thresholds (\code{n_thresholds > 1}), it supports "hinge" and "stegmented" types,
-#' using a sequential LRT approach:
-#' \enumerate{
-#'   \item Fits a null model (0 thresholds).
-#'   \item Fits models with 1 to \code{n_thresholds} thresholds, selecting the best combination.
-#'   \item Computes LRT statistic: \code{2 * (loglik_k - loglik_{k-1})}.
-#'   \item Uses chi-squared distribution for p-values (df = 1 for "hinge", 2 for "stegmented").
-#' }
+#' For single thresholds (`n_thresholds = 1`), the function tests for a change point using likelihood
+#' ratio or score tests, with p-values computed via Monte Carlo or parametric bootstrap methods. For
+#' multiple thresholds (`n_thresholds > 1`), it supports "hinge" and "stegmented" types, using a
+#' sequential LRT approach:
+#' 1. Fits a null model (0 thresholds).
+#' 2. Fits models with 1 to `n_thresholds` thresholds, selecting the best combination.
+#' 3. Computes LRT statistic: `2 * (loglik_k - loglik_{k-1})`.
+#' 4. Uses chi-squared distribution for p-values (df = 1 for "hinge", 2 for "stegmented").
+#'
+#' ### Consideration for `n_thresholds = 1`
+#' When `n_thresholds = 1` and you specify `cluster_var = "cluster"` for cluster-robust standard errors,
+#' including `factor(ID)` as fixed effects in `formula.null` might be redundant if `cluster` corresponds
+#' to `ID`. This can lead to collinearity, causing a singular matrix error. To address this, try simplifying
+#' the null model by removing `factor(ID)`:
+#'
+#' ```r
+#' formula.null = as.formula('cholestrol ~ age + Gender + education + dose.METFORMIN + dose.ATORVASTATIN + dose.SIMVASTATIN')
+#' ```
+#'
+#' - **Pros**: Reduces the number of parameters, likely eliminating singularity and improving model stability.
+#' - **Cons**: Loses individual-specific intercepts, but clustering via `cluster_var` adjusts standard errors
+#'   for intra-ID correlation, mitigating this loss.
+#' - **Test**: Rerun `segsteg.test` with the simplified formula. If it runs successfully, the issue was likely
+#'   due to `factor(ID)`.
+#'
+#' This adjustment leverages `cluster_var` to handle ID-level effects implicitly, avoiding redundancy and
+#' ensuring the model is well-specified.
 #'
 #' @examples
 #' # Generate sample data with two hinge thresholds
