@@ -893,34 +893,61 @@ multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "
 
     # Fit models with 1 to effective_n_thresholds thresholds
     for (k in 1:effective_n_thresholds) {
-      comb <- t(combn(chngpts, k))
-      n_comb <- nrow(comb)
-      logliks_k <- numeric(n_comb)
-      for (i in 1:n_comb) {
-        thresholds <- comb[i, ]
-        if (type == "hinge") {
-          X_threshold <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+      tryCatch({
+        comb <- t(combn(chngpts, k))
+        n_comb <- nrow(comb)
+        logliks_k <- numeric(n_comb)
+        for (i in 1:n_comb) {
+          thresholds <- comb[i, ]
+          if (type == "hinge") {
+            X_threshold <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+          } else {
+            X_step <- sapply(thresholds, function(e) as.numeric(chngpt_var > e))
+            X_seg <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+            X_threshold <- cbind(X_step, X_seg)
+          }
+          X <- cbind(Z, X_threshold)
+          fit <- glm(y ~ 0 + X, family = switch(family, "gaussian" = gaussian(),
+                                                "binomial" = binomial()),
+                     weights = prec.weights)
+          logliks_k[i] <- logLik(fit)
+          if (verbose) {
+            cat(sprintf("Combination %d, k=%d, thresholds: %s, log-likelihood: %.4f\n",
+                        i, k, paste(thresholds, collapse = ", "), logliks_k[i]))
+          }
+        }
+        best_idx <- which.max(logliks_k)
+        best_thresholds <- comb[best_idx, ]
+
+        # Safe assignment to lists
+        if (k + 1 <= length(logliks)) {
+          logliks[k + 1] <- logliks_k[best_idx]
         } else {
-          X_step <- sapply(thresholds, function(e) as.numeric(chngpt_var > e))
-          X_seg <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
-          X_threshold <- cbind(X_step, X_seg)
+          logliks <- c(logliks, logliks_k[best_idx])
         }
-        X <- cbind(Z, X_threshold)
-        fit <- glm(y ~ 0 + X, family = switch(family, "gaussian" = gaussian(),
-                                              "binomial" = binomial()),
-                   weights = prec.weights)
-        logliks_k[i] <- logLik(fit)
+
+        thresholds_list[[k + 1]] <- best_thresholds
+        all_combinations_list[[k + 1]] <- comb
+        fits[[k]] <- fit
+      },
+      error = function(e) {
         if (verbose) {
-          cat(sprintf("Combination %d, k=%d, thresholds: %s, log-likelihood: %.4f\n",
-                      i, k, paste(thresholds, collapse = ", "), logliks_k[i]))
+          cat(sprintf("Error in fitting model with k=%d thresholds: %s\n",
+                      k, conditionMessage(e)))
         }
-      }
-      best_idx <- which.max(logliks_k)
-      best_thresholds <- comb[best_idx, ]
-      logliks[k + 1] <- logliks_k[best_idx]
-      thresholds_list[[k + 1]] <- best_thresholds
-      all_combinations_list[[k + 1]] <- comb
-      fits[[k]] <- fit
+        # Ensure lists have valid entries even on error
+        if (k + 1 > length(thresholds_list) && k > 1) {
+          # If error occurs, use results from previous iteration
+          thresholds_list[[k + 1]] <- thresholds_list[[k]]
+          if (k + 1 <= length(logliks)) {
+            logliks[k + 1] <- logliks[k]
+          } else {
+            logliks <- c(logliks, logliks[k])
+          }
+          all_combinations_list[[k + 1]] <- all_combinations_list[[k]]
+          fits[[k]] <- fits[[k-1]]
+        }
+      })
     }
 
     # Compute LRT p-values
