@@ -640,12 +640,12 @@ make.chngpt.var <- function(chngpt_var, chngpt, type, data) {
 #'
 #' @export
 multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "gaussian"),
-                         data, type = c("step", "hinge", "segmented", "stegmented"),
-                         test.statistic = c("lr", "score"), chngpts = NULL,
-                         lb.quantile = 0.1, ub.quantile = 0.9, chngpts.cnt = 50,
-                         prec.weights = NULL, p.val.method = c("MC", "param.boot"),
-                         mc.n = 50000, boot.B = 10000, robust = FALSE, keep.fits = FALSE,
-                         verbose = FALSE, n_thresholds = 1, cluster_var = NULL) {
+                          data, type = c("step", "hinge", "segmented", "stegmented"),
+                          test.statistic = c("lr", "score"), chngpts = NULL,
+                          lb.quantile = 0.1, ub.quantile = 0.9, chngpts.cnt = 50,
+                          prec.weights = NULL, p.val.method = c("MC", "param.boot"),
+                          mc.n = 50000, boot.B = 10000, robust = FALSE, keep.fits = FALSE,
+                          verbose = FALSE, n_thresholds = 1, cluster_var = NULL) {
   requireNamespace("sandwich", quietly = TRUE)
   requireNamespace("MASS", quietly = TRUE)  # For mvrnorm in MC p-value
 
@@ -656,7 +656,7 @@ multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "
   test.statistic <- match.arg(test.statistic)
   p.val.method <- match.arg(p.val.method)
 
-  # Initialize .Random.seed if it doesn’t exist
+  # Initialize .Random.seed if it doesn't exist
   if (!exists(".Random.seed")) runif(1)
   save.seed <- .Random.seed
   set.seed(1)
@@ -865,13 +865,6 @@ multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "
                       weights = prec.weights)
     loglik_null <- logLik(null_model)
 
-    # Initialize lists to store results
-    fits <- list()
-    logliks <- numeric(n_thresholds + 1)
-    logliks[1] <- loglik_null
-    thresholds_list <- list(NULL)
-    all_combinations_list <- list(NULL)
-
     # Adjust n_thresholds if insufficient unique thresholds
     effective_n_thresholds <- n_thresholds
     if (length(chngpts) < n_thresholds) {
@@ -891,75 +884,57 @@ multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "
       }
     }
 
+    # Initialize lists to store results with effective size
+    fits <- list()
+    logliks <- numeric(effective_n_thresholds + 1)
+    logliks[1] <- loglik_null
+    thresholds_list <- list()
+    thresholds_list[[1]] <- NULL  # Initialize for null model
+    all_combinations_list <- list()
+    all_combinations_list[[1]] <- NULL  # Initialize for null model
+
     # Fit models with 1 to effective_n_thresholds thresholds
     for (k in 1:effective_n_thresholds) {
-      tryCatch({
-        comb <- t(combn(chngpts, k))
-        n_comb <- nrow(comb)
-        logliks_k <- numeric(n_comb)
-        for (i in 1:n_comb) {
-          thresholds <- comb[i, ]
-          if (type == "hinge") {
-            X_threshold <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
-          } else {
-            X_step <- sapply(thresholds, function(e) as.numeric(chngpt_var > e))
-            X_seg <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
-            X_threshold <- cbind(X_step, X_seg)
-          }
-          X <- cbind(Z, X_threshold)
-          fit <- glm(y ~ 0 + X, family = switch(family, "gaussian" = gaussian(),
-                                                "binomial" = binomial()),
-                     weights = prec.weights)
-          logliks_k[i] <- logLik(fit)
-          if (verbose) {
-            cat(sprintf("Combination %d, k=%d, thresholds: %s, log-likelihood: %.4f\n",
-                        i, k, paste(thresholds, collapse = ", "), logliks_k[i]))
-          }
-        }
-        best_idx <- which.max(logliks_k)
-        best_thresholds <- comb[best_idx, ]
-
-        # Safe assignment to lists
-        if (k + 1 <= length(logliks)) {
-          logliks[k + 1] <- logliks_k[best_idx]
+      comb <- t(combn(chngpts, k))
+      n_comb <- nrow(comb)
+      logliks_k <- numeric(n_comb)
+      for (i in 1:n_comb) {
+        thresholds <- comb[i, ]
+        if (type == "hinge") {
+          X_threshold <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
         } else {
-          logliks <- c(logliks, logliks_k[best_idx])
+          X_step <- sapply(thresholds, function(e) as.numeric(chngpt_var > e))
+          X_seg <- sapply(thresholds, function(e) pmax(chngpt_var - e, 0))
+          X_threshold <- cbind(X_step, X_seg)
         }
-
-        thresholds_list[[k + 1]] <- best_thresholds
-        all_combinations_list[[k + 1]] <- comb
-        fits[[k]] <- fit
-      },
-      error = function(e) {
+        X <- cbind(Z, X_threshold)
+        fit <- glm(y ~ 0 + X, family = switch(family, "gaussian" = gaussian(),
+                                              "binomial" = binomial()),
+                   weights = prec.weights)
+        logliks_k[i] <- logLik(fit)
         if (verbose) {
-          cat(sprintf("Error in fitting model with k=%d thresholds: %s\n",
-                      k, conditionMessage(e)))
+          cat(sprintf("Combination %d, k=%d, thresholds: %s, log-likelihood: %.4f\n",
+                      i, k, paste(thresholds, collapse = ", "), logliks_k[i]))
         }
-        # Ensure lists have valid entries even on error
-        if (k + 1 > length(thresholds_list) && k > 1) {
-          # If error occurs, use results from previous iteration
-          thresholds_list[[k + 1]] <- thresholds_list[[k]]
-          if (k + 1 <= length(logliks)) {
-            logliks[k + 1] <- logliks[k]
-          } else {
-            logliks <- c(logliks, logliks[k])
-          }
-          all_combinations_list[[k + 1]] <- all_combinations_list[[k]]
-          fits[[k]] <- fits[[k-1]]
-        }
-      })
+      }
+      best_idx <- which.max(logliks_k)
+      best_thresholds <- comb[best_idx, ]
+      logliks[k + 1] <- logliks_k[best_idx]
+      thresholds_list[[k + 1]] <- best_thresholds
+      all_combinations_list[[k + 1]] <- comb
+      fits[[k]] <- fit
     }
 
-    # Compute LRT p-values
-    p_values <- numeric(n_thresholds)
-    for (k in 1:n_thresholds) {
+    # Compute LRT p-values using effective_n_thresholds
+    p_values <- numeric(effective_n_thresholds)
+    for (k in 1:effective_n_thresholds) {
       lr_stat <- 2 * (logliks[k + 1] - logliks[k])
       df_diff <- if (type == "hinge") 1 else 2
       p_values[k] <- pchisq(lr_stat, df = df_diff, lower.tail = FALSE)
     }
 
-    # Fit final model
-    k <- n_thresholds
+    # Fit final model using effective_n_thresholds
+    k <- effective_n_thresholds
     best_thresholds <- thresholds_list[[k + 1]]
     if (type == "hinge") {
       X_threshold <- sapply(best_thresholds, function(e) pmax(chngpt_var - e, 0))
@@ -987,10 +962,12 @@ multi_ss.test <- function(formula.null, formula.chngpt, family = c("binomial", "
     res <- list(
       thresholds = best_thresholds,
       fit = best_fit,
-      loglik = logliks[n_thresholds + 1],
+      loglik = logliks[effective_n_thresholds + 1],
       all_logliks = logliks,
       all_combinations = all_combinations_list,
       p_values = p_values,
+      effective_n_thresholds = effective_n_thresholds,
+      original_n_thresholds = n_thresholds,
       vcov_cluster = vcov_cluster,
       se_cluster = se_cluster,
       data.name = DNAME
