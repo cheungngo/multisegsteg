@@ -44,33 +44,28 @@ balance_drug_dataset_zero <- function(df, formula1, formula2, target_percentage 
   if (inherits(formula1, "formula")) formula1 <- as.character(formula1)
   if (inherits(formula2, "formula")) formula2 <- as.character(formula2)
 
-  # Extract drug variable from formula2
+  # Extract target variable from formula2
   if (is.null(formula2) || !grepl("~", formula2)) {
-    stop("formula2 must be provided and contain '~', e.g., '~dose.DRUGNAME'")
+    stop("formula2 must be provided and contain '~', e.g., '~variable_name'")
   }
 
-  # Extract the drug variable - look for patterns like 'dose.DRUGNAME' or 'wz_dose.DRUGNAME'
-  drug_pattern <- "(?:wz_)?dose\\.([A-Z]+)"
-  drug_matches <- regmatches(formula2, gregexpr(drug_pattern, formula2, perl = TRUE))[[1]]
-
-  if (length(drug_matches) == 0) {
-    stop(paste("Could not find drug variable in formula2:", formula2,
-               "Expected format like '~dose.DRUGNAME' or '~wz_dose.DRUGNAME'"))
+  # Parse the formula - extract everything after the ~
+  formula_parts <- strsplit(formula2, "~", fixed = TRUE)[[1]]
+  if (length(formula_parts) < 2 || nchar(trimws(formula_parts[2])) == 0) {
+    stop("Formula2 must contain a variable after the ~ symbol")
   }
 
-  # Extract the actual drug name by removing the prefix
-  drug_name <- sub(".*dose\\.", "", drug_matches[1])
+  # Get the right-hand side of the formula and split by +
+  rhs_terms <- strsplit(trimws(formula_parts[2]), "\\+")[[1]]
+  # Take the first term as the target variable (trimming whitespace)
+  target_variable <- trimws(rhs_terms[1])
 
-  # Determine the actual column name to use for balancing
-  if (paste0("dose.", drug_name) %in% colnames(df)) {
-    target_column <- paste0("dose.", drug_name)
-  } else if (paste0("wz_dose.", drug_name) %in% colnames(df)) {
-    target_column <- paste0("wz_dose.", drug_name)
-  } else {
-    stop(paste0("Neither 'dose.", drug_name, "' nor 'wz_dose.", drug_name, "' found in dataframe columns"))
+  # Check if target variable exists in the dataframe
+  if (!target_variable %in% colnames(df)) {
+    stop(paste0("Target variable '", target_variable, "' not found in dataframe columns"))
   }
 
-  cat("Balancing dataset based on", target_column, "\n")
+  cat("Balancing dataset based on", target_variable, "\n")
 
   # Extract variables from formula1
   variables <- c()
@@ -88,20 +83,11 @@ balance_drug_dataset_zero <- function(df, formula1, formula2, target_percentage 
     }
   }
 
-  # Extract additional variables from formula2 if there are any besides the drug
-  if (grepl("~", formula2)) {
-    parts <- strsplit(formula2, "~")[[1]]
-    if (length(parts) > 1) {
-      predictors <- trimws(parts[2])
-      predictor_vars <- strsplit(predictors, "\\+")[[1]]
-      for (v in predictor_vars) {
-        v <- trimws(v)
-        # Skip the drug variable we're already handling
-        if (!grepl(drug_name, v)) {
-          variables <- c(variables, v)
-        }
-      }
-    }
+  # Extract additional variables from formula2 if there are any besides the target variable
+  if (length(rhs_terms) > 1) {
+    # Add all terms except the first one (which we've already handled)
+    additional_vars <- trimws(rhs_terms[-1])
+    variables <- c(variables, additional_vars)
   }
 
   # Remove duplicates and filter for valid columns
@@ -115,21 +101,21 @@ balance_drug_dataset_zero <- function(df, formula1, formula2, target_percentage 
   }
 
   # Split dataset based on target column
-  zero_mask <- df[[target_column]] == 0
+  zero_mask <- df[[target_variable]] == 0
   zero_df <- df[zero_mask, ]
   non_zero_df <- df[!zero_mask, ]
 
   # Print initial stats
   cat(sprintf("Original dataset: %d rows\n", nrow(df)))
   cat(sprintf("- With %s = 0: %d rows (%.1f%%)\n",
-              target_column, nrow(zero_df), nrow(zero_df)/nrow(df)*100))
+              target_variable, nrow(zero_df), nrow(zero_df)/nrow(df)*100))
   cat(sprintf("- With %s > 0: %d rows (%.1f%%)\n",
-              target_column, nrow(non_zero_df), nrow(non_zero_df)/nrow(df)*100))
+              target_variable, nrow(non_zero_df), nrow(non_zero_df)/nrow(df)*100))
 
   # If there are too few non-zero entries, warn the user
   if (nrow(non_zero_df) < 10) {
-    warning(sprintf("Only %d entries with %s > 0. Consider using a different drug variable with more non-zero values.",
-                    nrow(non_zero_df), target_column))
+    warning(sprintf("Only %d entries with %s > 0. Consider using a different variable with more non-zero values.",
+                    nrow(non_zero_df), target_variable))
   }
 
   # Create stratification features for each variable
@@ -202,14 +188,14 @@ balance_drug_dataset_zero <- function(df, formula1, formula2, target_percentage 
   balanced_df <- df[balanced_indices, ]
 
   # Print final stats
-  zero_count_balanced <- sum(balanced_df[[target_column]] == 0)
-  non_zero_count_balanced <- sum(balanced_df[[target_column]] > 0)
+  zero_count_balanced <- sum(balanced_df[[target_variable]] == 0)
+  non_zero_count_balanced <- sum(balanced_df[[target_variable]] > 0)
 
   cat(sprintf("Balanced dataset: %d rows\n", nrow(balanced_df)))
   cat(sprintf("- With %s = 0: %d rows (%.1f%%)\n",
-              target_column, zero_count_balanced, zero_count_balanced/nrow(balanced_df)*100))
+              target_variable, zero_count_balanced, zero_count_balanced/nrow(balanced_df)*100))
   cat(sprintf("- With %s > 0: %d rows (%.1f%%)\n",
-              target_column, non_zero_count_balanced, non_zero_count_balanced/nrow(balanced_df)*100))
+              target_variable, non_zero_count_balanced, non_zero_count_balanced/nrow(balanced_df)*100))
 
   # Verify stratification was maintained
   cat("\nVerifying variable distributions were preserved:\n")
@@ -217,7 +203,7 @@ balance_drug_dataset_zero <- function(df, formula1, formula2, target_percentage 
     if (!is.factor(df[[var]]) && !is.character(df[[var]]) && length(unique(df[[var]])) > 5) {
       # For continuous variables, compare means
       orig_mean <- mean(zero_df[[var]], na.rm = TRUE)
-      sampled_mean <- mean(balanced_df[balanced_df[[target_column]] == 0, var], na.rm = TRUE)
+      sampled_mean <- mean(balanced_df[balanced_df[[target_variable]] == 0, var], na.rm = TRUE)
       cat(sprintf("- %s mean: Original=%.2f, Sampled=%.2f\n", var, orig_mean, sampled_mean))
     } else {
       # For categorical, just indicate distribution was maintained
